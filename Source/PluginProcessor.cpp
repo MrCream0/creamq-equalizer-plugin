@@ -103,6 +103,16 @@ void EqualizerAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBl
 
     leftChain.prepare(spec);
     rightChain.prepare(spec);
+
+    auto chainSettings = getChainSettings(apvts);
+
+    auto peakCoefficients = juce::dsp::IIR::Coefficients<float>::makePeakFilter(sampleRate,
+                                                                                chainSettings.peakFrequency,
+                                                                                chainSettings.peakQuality,
+                                                                                juce::Decibels::decibelsToGain(chainSettings.peakGainInDecibels));
+
+    *leftChain.get<ChainPositions::Peak>().coefficients = *peakCoefficients;
+    *rightChain.get<ChainPositions::Peak>().coefficients = *peakCoefficients;
 }
 
 void EqualizerAudioProcessor::releaseResources()
@@ -152,6 +162,17 @@ void EqualizerAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
     for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
         buffer.clear (i, 0, buffer.getNumSamples());
 
+    auto chainSettings = getChainSettings(apvts);
+
+    auto peakCoefficients = juce::dsp::IIR::Coefficients<float>::makePeakFilter(getSampleRate(),
+        chainSettings.peakFrequency,
+        chainSettings.peakQuality,
+        juce::Decibels::decibelsToGain(chainSettings.peakGainInDecibels));
+
+    *leftChain.get<ChainPositions::Peak>().coefficients = *peakCoefficients;
+    *rightChain.get<ChainPositions::Peak>().coefficients = *peakCoefficients;
+
+
     juce::dsp::AudioBlock<float> block(buffer);
 
     auto leftBlock = block.getSingleChannelBlock(0);
@@ -190,6 +211,21 @@ void EqualizerAudioProcessor::setStateInformation (const void* data, int sizeInB
     // whose contents will have been created by the getStateInformation() call.
 }
 
+ChainSettings setChainSettings(juce::AudioProcessorValueTreeState& apvts)
+{
+    ChainSettings settings;
+
+    settings.lowCutFrequency = apvts.getRawParameterValue("Low Cut Frequency")->load();
+    settings.highCutFrequency = apvts.getRawParameterValue("High Cut Frequency")->load();
+    settings.peakFrequency = apvts.getRawParameterValue("Peak Frequency")->load();
+    settings.peakGainInDecibels = apvts.getRawParameterValue("Peak Gain")->load();
+    settings.peakQuality = apvts.getRawParameterValue("Peak Quality")->load();
+    settings.lowCutSlope = apvts.getRawParameterValue("Low Cut Slope")->load();
+    settings.highCutSlope = apvts.getRawParameterValue("High Cut Slope")->load();
+
+    return settings;
+}
+
 juce::AudioProcessorValueTreeState::ParameterLayout
 EqualizerAudioProcessor::createParameterLayout()
 {
@@ -197,17 +233,17 @@ EqualizerAudioProcessor::createParameterLayout()
     
     layout.add(std::make_unique<juce::AudioParameterFloat>("Low Cut Frequency",
                                                             "Low Cut Frequency",
-                                                            juce::NormalisableRange<float>(20.f, 20000.f, 1.f, 1.f), 20.f));
+                                                            juce::NormalisableRange<float>(20.f, 20000.f, 1.f, 0.25f), 20.f));
 
 
     layout.add(std::make_unique<juce::AudioParameterFloat>("High Cut Frequency",
                                                             "High Cut Frequency",
-                                                            juce::NormalisableRange<float>(20.f, 20000.f, 1.f, 1.f), 20000.f));
+                                                            juce::NormalisableRange<float>(20.f, 20000.f, 1.f, 0.25f), 20000.f));
 
 
     layout.add(std::make_unique<juce::AudioParameterFloat>("Peak Frequency",
                                                             "Peak Frequency",
-                                                            juce::NormalisableRange<float>(20.f, 20000.f, 1.f, 1.f), 750.f));
+                                                            juce::NormalisableRange<float>(20.f, 20000.f, 1.f, 0.25f), 750.f));
 
 
     layout.add(std::make_unique<juce::AudioParameterFloat>("Peak Gain",
